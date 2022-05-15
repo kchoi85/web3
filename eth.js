@@ -1,6 +1,7 @@
 require("dotenv").config();
 
 const Web3 = require("web3");
+var Tx = require("ethereumjs-tx").Transaction;
 
 // RPC stands for Remote Procedure Call
 const rpcURL = `https://mainnet.infura.io/v3/${process.env.INFURA_PROJECT_ID}`;
@@ -263,4 +264,76 @@ OMG_contract.methods.symbol().call((err, result) => {
 
 OMG_contract.methods.balanceOf(personal_address).call((err, result) => {
   console.log("balance of OMGToken in personal addr:", result);
+});
+
+// sign transcations locally with ethereumjs-tx
+const web3_ropsten = new Web3(
+  `https://ropsten.infura.io/v3/${process.env.INFURA_PROJECT_ID}`
+);
+
+// create test sender and receiver accounts
+const sender = web3_ropsten.eth.accounts.create();
+
+/*
+{
+  address: '0x40a8ea41f8d87E362426607D5a57a4D36CDA28B7',
+  privateKey: '0x1d347dd7b2f220628d613adacea22f15992945435de0c6f43850034603a696f9',
+  signTransaction: [Function: signTransaction],
+  sign: [Function: sign],
+  encrypt: [Function: encrypt]
+}
+*/
+
+const receiver = web3_ropsten.eth.accounts.create();
+/**
+ {
+  address: '0xFDC18488e5ADB18d0313eC28a2a5248632C5242e',
+  privateKey: '0x852a3046597624f17350b767f47936acd559e321fffb6d4e2adc7b48d18c437b',
+  signTransaction: [Function: signTransaction],
+  sign: [Function: sign],
+  encrypt: [Function: encrypt]
+}
+ */
+
+const sender_addr = sender.address;
+const sender_pKey = sender.privateKey;
+const receiver_addr = receiver.address;
+const receiver_pKey = receiver.privateKey;
+
+// to sign transaction with pKeys, must convert to string of binary data with Buffer
+const pKey1 = Buffer.from(sender_pKey, "hex");
+const pKey2 = Buffer.from(receiver_pKey, "hex");
+
+/*
+nonce - this is the previous transaction count for the given account. We'll assign the value of this variable momentarily. We also must convert this value to hexidecimal. We can do this with the Web3.js utilitly web3.utils.toHex()
+to - the account we're sending Ether to.
+value - the amount of Ether we want to send. This value must be expressed in Wei and converted to hexidecimal. We can convert the value to we with the Web3.js utility web3.utils.toWei().
+gasLimit - this is the maximum amount of gas consumed by the transaction. A basic transaction like this always costs 21000 units of gas, so we'll use that for the value here.
+gasPrice - this is the amount we want to pay for each unit of gas. I'll use 10 Gwei here.
+*/
+
+web3_ropsten.eth.getTransactionCount(sender_addr, (err, txCount) => {
+  // Transaction object
+  const txObject = {
+    nonce: web3.utils.toHex(txCount),
+    to: receiver_addr,
+    value: web3.utils.toHex(web3.utils.toWei("0.1", "ether")),
+    gasLimit: web3.utils.toHex(21000),
+    gasPrice: web3.utils.toHex(web3.utils.toWei("10", "gwei")),
+  };
+
+  // using the etheremjs-tx library to create a new Tx object.
+  // We also use this library to sign the transaction with privateKey1
+  const tx = new Tx(txObject);
+  tx.sign(pKey1);
+
+  // we serialize the transaction and convert it to a hexidecimal string
+  // so that it can be passed to Web3.
+  const serializedTx = tx.serialize();
+  const raw = "0x" + serializedTx.toString("hex");
+
+  // We send the transaction to the Ethereum network.
+  web3_ropsten.eth.sendSignedTransaction(raw, (err, txHash) => {
+    console.log("txHash", txHash);
+  });
 });
